@@ -1,8 +1,7 @@
 const { createKafkaConsumer } = require("./kafkaConsumer");
-const { createInfluxWriter } = require("./influxWriter");
+const { writeBatch, close } = require("./influxWriter");
 
 async function main() {
-  const { writeBatch, close } = createInfluxWriter();
 
   const consumer = await createKafkaConsumer(async (batch) => {
     await writeBatch(batch);

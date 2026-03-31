@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Demo IoT telemetry pipeline: MQTT -> Kafka -> InfluxDB",
   "scripts": {
-    "start:simulator": "node simulator/deviceSimulator.js",
+    "start:producer": "node producer/deviceSimulator.js",
     "start:bridge": "node bridge/index.js",
     "start:consumer": "node consumer/index.js"
   },

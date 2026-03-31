@@ -16,6 +16,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("Bridge failed to start:", err);
+  console.error("Mqqt-kafka Bridge failed to start:", err);
   process.exit(1);
 });

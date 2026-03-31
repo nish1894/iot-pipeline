@@ -9,7 +9,7 @@ async function createKafkaConsumer(onBatch) {
 
   const consumer = kafka.consumer({ groupId: config.kafka.consumerGroup });
   await consumer.connect();
-  await consumer.subscribe({ topic: config.kafka.topic, fromBeginning: false });
+  await consumer.subscribe({ topic: config.kafka.topic, fromBeginning: false }); // read latest messages only 
 
   console.log(`Kafka consumer connected, group: ${config.kafka.consumerGroup}`);
 
@@ -29,7 +29,6 @@ async function createKafkaConsumer(onBatch) {
   }
 
   await consumer.run({
-    // eachBatch gives us more control than eachMessage for bulk writes
     eachMessage: async ({ message }) => {
       let payload;
       try {

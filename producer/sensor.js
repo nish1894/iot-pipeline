@@ -1,5 +1,6 @@
 
-// moch sensosrs 
+// mock sensors
+
 
 const SENSORS = {
   temperature: () => parseFloat((18 + Math.random() * 14).toFixed(2)),  // °C  18–32
@@ -18,3 +19,5 @@ function readSensors(deviceId) {
 }
 
 module.exports = { readSensors };
+
+

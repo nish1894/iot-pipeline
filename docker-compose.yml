@@ -1,15 +1,49 @@
 version: "3.8"
 
 services:
-  mosquitto:
-    image: eclipse-mosquitto:2
+
+  emqx:
+    image: emqx/emqx:5.8
     ports:
       - "1883:1883"
-      - "9001:9001"
+      - "18083:18083"
     volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - mosquitto-data:/mosquitto/data
-      - mosquitto-log:/mosquitto/log
+      - ./emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:-public}
+    healthcheck:
+      test: ["CMD", "emqx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  kafka:
+    image: apache/kafka:4.0.0
+    ports:
+      - "9092:9093"   # host:9092 → container PLAINTEXT_HOST listener on 9093
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093,CONTROLLER://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   influxdb:
     image: influxdb:2.7
@@ -17,15 +51,64 @@ services:
       - "8086:8086"
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: adminpassword
-      DOCKER_INFLUXDB_INIT_ORG: my-org
-      DOCKER_INFLUXDB_INIT_BUCKET: telemetry
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: my-super-secret-token
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
     volumes:
       - influxdb-data:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  bridge:
+    build: .
+    command: node bridge/index.js
+    environment:
+      MQTT_URL: mqtt://emqx:1883
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      emqx:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  consumer:
+    build: .
+    command: node consumer/index.js
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-500}
+      KAFKA_FLUSH_MS: ${KAFKA_FLUSH_MS:-5000}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  producer:
+    build: .
+    command: node producer/deviceSimulator.js
+    environment:
+      MQTT_URL: mqtt://emqx:1883
+      NUM_DEVICES: ${NUM_DEVICES:-100}
+      PUBLISH_INTERVAL_MS: ${PUBLISH_INTERVAL_MS:-1000}
+    depends_on:
+      emqx:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  mosquitto-data:
-  mosquitto-log:
+  emqx-data:
+  emqx-log:
   influxdb-data:

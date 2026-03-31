@@ -8,10 +8,8 @@ async function createKafkaProducer() {
   });
 
   const producer = kafka.producer({
-    // Enable idempotency for exactly-once delivery within a session
-    idempotent: true,
-    // Compress batches to reduce network overhead at high throughput
-    compression: CompressionTypes.GZIP,
+    idempotent: true, // no duplicate writes
+    compression: CompressionTypes.GZIP //compression for more throughtput
   });
 
   await producer.connect();
@@ -30,7 +28,6 @@ async function createKafkaProducer() {
         ],
       });
     } catch (err) {
-      // Log and drop — bridge stays alive; downstream can catch up on reconnect
       console.error(`Kafka send error for ${deviceId}:`, err.message);
     }
   }
