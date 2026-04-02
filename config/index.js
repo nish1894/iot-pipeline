@@ -21,8 +21,8 @@ module.exports = {
   },
   simulator: {
     numDevices: parseInt(process.env.NUM_DEVICES || "100", 10), //base 10 = decimal
-    staticIntervalMs: parseInt(process.env.PUBLISH_INTERVAL_MS || "1000", 10),
-    throughPutRate: parseInt(process.env.THROUGH_PUT_RATE || "20000", 10) // per second 
+    staticIntervalMs: parseInt(process.env.PUBLISH_INTERVAL_MS || "10000", 10),
+    throughPutRate: parseInt(process.env.THROUGH_PUT_RATE || "5000", 10) // per second 
   },
   consumer: {
     batchSize: parseInt(process.env.KAFKA_BATCH_SIZE || "50000", 10),

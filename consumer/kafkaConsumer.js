@@ -13,6 +13,16 @@ async function createKafkaConsumer(onBatch) {
 
   console.log(`Kafka consumer connected, group: ${config.kafka.consumerGroup}`);
 
+  //logger 
+  let lastFlushTime = Date.now();
+  function metricLogger(toFlush){
+    const timeDiffMs = Date.now() - lastFlushTime;
+    const rate = (toFlush.length / (timeDiffMs / 1000)).toFixed(2);
+    console.log(`[Flush] Batch: ${toFlush.length}, Rate: ${rate} msg/s`);
+    lastFlushTime = Date.now();
+  }
+
+
   // Accumulate messages and flush either when batch is full or timer fires
   let buffer = [];
   let flushTimer = null;
@@ -23,6 +33,7 @@ async function createKafkaConsumer(onBatch) {
       flushTimer = null;
       if (buffer.length > 0) {
         const toFlush = buffer.splice(0, buffer.length);
+        metricLogger(toFlush);
         await onBatch(toFlush);
       }
     }, config.consumer.flushMs);
@@ -44,13 +55,35 @@ async function createKafkaConsumer(onBatch) {
         clearTimeout(flushTimer);
         flushTimer = null;
         const toFlush = buffer.splice(0, buffer.length);
+        metricLogger(toFlush);
         await onBatch(toFlush);
       } else {
         scheduleFlush();
       }
     },
   });
+  // await consumer.run({
+  //   eachBatch: async ({ batch, resolveOffset, heartbeat }) => {
+  //     const messages = [];
 
+  //     for (const message of batch.messages) {
+  //       try {
+  //         const payload = JSON.parse(message.value.toString());
+  //         messages.push(payload);
+  //         resolveOffset(message.offset);
+  //       } catch {
+  //         console.warn("Skipping malformed message");
+  //       }
+  //     }
+
+  //     if (messages.length > 0) {
+  //       metricLogger(messages);
+  //       await onBatch(messages);
+  //     }
+
+  //     await heartbeat();
+  //   },
+  // });
   return consumer;
 }
 

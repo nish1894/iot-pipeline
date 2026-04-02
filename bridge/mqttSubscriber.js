@@ -4,6 +4,8 @@ const config = require("../config");
 const TOPIC = config.mqtt.telemetryTopic;
 
 function createMqttSubscriber(onMessage) {
+  console.log("????????mqqtsubscriber runnning????????");
+  
   const client = mqtt.connect(config.mqtt.url, {
     clientId: `bridge-${process.pid}`,
     reconnectPeriod: 2000, //try reconnection in 2s
