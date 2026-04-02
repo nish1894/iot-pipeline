@@ -9,7 +9,7 @@ const { publishTopicPrefix } = config.mqtt;
 // Burst logic calculation
 const msgsPerDevicePerBurst = Math.max(
   1,
-  Math.floor(throughPutRate / ((staticIntervalMs / 1000) * numDevices))
+  Math.floor(throughPutRate / ((staticIntervalMs / 1_000) * numDevices))
 );
 
 // IDs: device-00001, device-00002, etc.

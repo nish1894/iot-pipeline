@@ -37,6 +37,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_MESSAGE_MAX_BYTES: 20971520
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 20971520
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
@@ -71,6 +73,8 @@ services:
     environment:
       MQTT_URL: mqtt://emqx:1883
       KAFKA_BROKERS: kafka:9092
+      KAFKA_MAX_BUFFER_BYTES: ${KAFKA_MAX_BUFFER_BYTES:-10485760}
+      KAFKA_LINGER_MS: ${KAFKA_LINGER_MS:-1000}
     depends_on:
       emqx:
         condition: service_healthy
@@ -87,7 +91,7 @@ services:
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_ORG: ${INFLUX_ORG}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
-      KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-500}
+      KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-50000}
       KAFKA_FLUSH_MS: ${KAFKA_FLUSH_MS:-5000}
     depends_on:
       kafka:
@@ -103,6 +107,7 @@ services:
       MQTT_URL: mqtt://emqx:1883
       NUM_DEVICES: ${NUM_DEVICES:-100}
       PUBLISH_INTERVAL_MS: ${PUBLISH_INTERVAL_MS:-1000}
+      THROUGH_PUT_RATE: ${THROUGH_PUT_RATE:-2000}
     depends_on:
       emqx:
         condition: service_healthy

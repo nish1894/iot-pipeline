@@ -9,81 +9,110 @@ async function createKafkaConsumer(onBatch) {
 
   const consumer = kafka.consumer({ groupId: config.kafka.consumerGroup });
   await consumer.connect();
-  await consumer.subscribe({ topic: config.kafka.topic, fromBeginning: false }); // read latest messages only 
+  await consumer.subscribe({ topic: config.kafka.topic, fromBeginning: false });
 
   console.log(`Kafka consumer connected, group: ${config.kafka.consumerGroup}`);
 
-  //logger 
-  let lastFlushTime = Date.now();
-  function metricLogger(toFlush){
-    const timeDiffMs = Date.now() - lastFlushTime;
-    const rate = (toFlush.length / (timeDiffMs / 1000)).toFixed(2);
-    console.log(`[Flush] Batch: ${toFlush.length}, Rate: ${rate} msg/s`);
-    lastFlushTime = Date.now();
+  // metrics — print every 1 second
+  let totalFlushed = 0;
+  let lastLogTime = Date.now();
+
+  function metricLogger(count) {
+    totalFlushed += count;
   }
 
+  setInterval(() => {
+    const timeDiffMs = Date.now() - lastLogTime;
+    const rate = (totalFlushed / (timeDiffMs / 1000)).toFixed(2);
+    console.log(`[Metrics] Flushed: ${totalFlushed}, Rate: ${rate} msg/s`);
+    totalFlushed = 0;
+    lastLogTime = Date.now();
+  }, 3_000);
 
-  // Accumulate messages and flush either when batch is full or timer fires
-  let buffer = [];
-  let flushTimer = null;
+  // queue backlog — print every 3 seconds
+  setInterval(() => {
+    const backlog = queue.length - head;
+    console.log(`[Queue] Backlog: ${backlog} batches`);
+  }, 3000);
 
-  function scheduleFlush() {
-    if (flushTimer) return;
-    flushTimer = setTimeout(async () => {
-      flushTimer = null;
-      if (buffer.length > 0) {
-        const toFlush = buffer.splice(0, buffer.length);
-        metricLogger(toFlush);
-        await onBatch(toFlush);
+  // queue (index pointer)
+  let queue = [];
+  let head = 0;
+
+  function enqueue(item) {
+    queue.push(item);
+  }
+
+  function dequeue() {
+    if (head >= queue.length) return null;
+    const item = queue[head++];
+    if (head > 10_000) {
+      queue = queue.slice(head);
+      head = 0;
+    }
+    return item;
+  }
+
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  async function worker() {
+    while (true) {
+      const batch = dequeue();
+
+      if (!batch) {
+        await sleep(10);
+        continue;
       }
-    }, config.consumer.flushMs);
+
+      const parsed = [];
+      for (const m of batch) {
+        try {
+          parsed.push(JSON.parse(m.toString()));
+        } catch {
+          console.warn("[Worker] Skipping malformed message");
+        }
+      }
+
+      if (parsed.length === 0) continue;
+
+      let attempt = 0;
+      const MAX_RETRIES = 3;
+
+      while (attempt < MAX_RETRIES) {
+        try {
+          await onBatch(parsed);
+          metricLogger(parsed.length);
+          break;
+        } catch (err) {
+          attempt++;
+          console.error(`[Worker] Attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+          await sleep(1000 * attempt);
+        }
+      }
+
+      if (attempt === MAX_RETRIES) {
+        console.error(`[DLQ] Dropping ${parsed.length} messages after ${MAX_RETRIES} retries`);
+      }
+    }
+  }
+
+  const WORKERS = 3;
+  for (let i = 0; i < WORKERS; i++) {
+    setTimeout(() => worker(), (10000 / WORKERS) * i);
   }
 
   await consumer.run({
-    eachMessage: async ({ message }) => {
-      let payload;
-      try {
-        payload = JSON.parse(message.value.toString());
-      } catch {
-        console.warn("Skipping malformed message");
-        return;
+    eachBatch: async ({ batch }) => {
+      const messages = [];
+      for (const message of batch.messages) {
+        messages.push(message.value);
       }
-
-      buffer.push(payload);
-
-      if (buffer.length >= config.consumer.batchSize) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-        const toFlush = buffer.splice(0, buffer.length);
-        metricLogger(toFlush);
-        await onBatch(toFlush);
-      } else {
-        scheduleFlush();
+      if (messages.length > 0) {
+        enqueue(messages);
       }
     },
   });
-  // await consumer.run({
-  //   eachBatch: async ({ batch, resolveOffset, heartbeat }) => {
-  //     const messages = [];
 
-  //     for (const message of batch.messages) {
-  //       try {
-  //         const payload = JSON.parse(message.value.toString());
-  //         messages.push(payload);
-  //         resolveOffset(message.offset);
-  //       } catch {
-  //         console.warn("Skipping malformed message");
-  //       }
-  //     }
-
-  //     if (messages.length > 0) {
-  //       metricLogger(messages);
-  //       await onBatch(messages);
-  //     }
-
-  //     await heartbeat();
-  //   },
-  // });
   return consumer;
 }
 
